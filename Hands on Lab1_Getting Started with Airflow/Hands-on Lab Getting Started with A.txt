@@ -1,0 +1,10 @@
+Hands-on Lab: Getting Started with Apache Airflow
+
+username: airflow
+pw:MTIzMjctYXJtYW5k
+
+Hands-on Lab: Create a DAG for Apache Airflow with PythonOperator
+
+username:airflow
+pw:MjY4ODUtYXJtYW5k
+

@@ -1,0 +1,124 @@
+# ETL_Server_Access_Log_Processing.py [from claude.ai]
+
+# 1. Imports block
+from datetime import timedelta
+from airflow import DAG
+from airflow.operators.python_operator import PythonOperator
+from airflow.utils.dates import days_ago
+import requests
+
+# 2. DAG Arguments block
+default_args = {
+    'owner': 'airflow',
+    'start_date': days_ago(0),
+    'email': ['airflow@example.com'],
+    'email_on_failure': True,
+    'email_on_retry': True,
+    'retries': 1,
+    'retry_delay': timedelta(minutes=5),
+}
+
+# 3. DAG Definition block — runs daily
+dag = DAG(
+    dag_id='ETL_Server_Access_Log_Processing',
+    default_args=default_args,
+    description='ETL DAG using PythonOperator for server access log',
+    schedule_interval=timedelta(days=1),
+)
+
+# ── Python functions ──────────────────────────────────────────────────────────
+
+url = (
+    'https://cf-courses-data.s3.us.cloud-object-storage.appdomain.cloud/'
+    'IBM-DB0250EN-SkillsNetwork/labs/Apache%20Airflow/'
+    'Build%20a%20DAG%20using%20Airflow/web-server-access-log.txt'
+)
+
+input_file  = '/home/project/airflow/dags/web-server-access-log.txt'
+extracted_file    = '/home/project/airflow/dags/extracted.txt'
+transformed_file  = '/home/project/airflow/dags/capitalized.txt'
+
+
+def download():
+    response = requests.get(url)
+    with open(input_file, 'wb') as f:
+        f.write(response.content)
+    print(f"Downloaded log file to {input_file}")
+
+
+def extract():
+    """Read the log file and extract timestamp (col 0) and visitorid (col 3)."""
+    with open(input_file, 'r') as infile, \
+         open(extracted_file, 'w') as outfile:
+        for line in infile:
+            fields = line.strip().split('#')
+            if len(fields) >= 4:
+                timestamp  = fields[0]
+                visitorid  = fields[3]
+                outfile.write(f"{timestamp}#{visitorid}\n")
+    print(f"Extracted timestamp and visitorid to {extracted_file}")
+
+
+def transform():
+    """Capitalize the visitorid field and store result in a local variable,
+    then write to the transformed file."""
+    transformed_data = []
+
+    with open(extracted_file, 'r') as infile:
+        for line in infile:
+            fields = line.strip().split('#')
+            if len(fields) == 2:
+                timestamp        = fields[0]
+                visitorid_upper  = fields[1].upper()   # capitalize visitorid
+                transformed_data.append(f"{timestamp}#{visitorid_upper}")
+
+    # Load transformed data into capitalized.txt
+    with open(transformed_file, 'w') as outfile:
+        for record in transformed_data:
+            outfile.write(record + '\n')
+
+    print(f"Transformed data written to {transformed_file}")
+
+
+def load():
+    """Confirm the capitalized.txt file is ready and print a sample."""
+    with open(transformed_file, 'r') as f:
+        lines = f.readlines()
+    print(f"Load complete. Total records: {len(lines)}")
+    print("Sample records:")
+    for line in lines[:5]:
+        print(line.strip())
+
+
+# ── Task definitions ──────────────────────────────────────────────────────────
+
+# Task: download
+download_task = PythonOperator(
+    task_id='download',
+    python_callable=download,
+    dag=dag,
+)
+
+# Task: extract
+extract_task = PythonOperator(
+    task_id='extract',
+    python_callable=extract,
+    dag=dag,
+)
+
+# Task: transform  (also handles the capitalize + store in local variable)
+transform_task = PythonOperator(
+    task_id='transform',
+    python_callable=transform,
+    dag=dag,
+)
+
+# Task: load
+load_task = PythonOperator(
+    task_id='load',
+    python_callable=load,
+    dag=dag,
+)
+
+# 8. Task pipeline
+download_task >> extract_task >> transform_task >> load_task
